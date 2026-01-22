@@ -23,11 +23,6 @@
  * ============================================================
  */
 
-// External variables dari file lain
-extern float encoderRpm[4];
-extern float imuYawCalibrated;
-extern bool ps3ControllerConnected;
-
 // ══════════════════════════════════════════════════════════
 // GLOBAL VARIABLES
 // ══════════════════════════════════════════════════════════

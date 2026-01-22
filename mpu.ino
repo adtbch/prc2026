@@ -27,31 +27,6 @@
  */
 
 // ══════════════════════════════════════════════════════════
-// GLOBAL VARIABLES
-// ══════════════════════════════════════════════════════════
-
-// MPU object
-static MPU6050 _mpu;
-
-// MPU control/status
-static bool _dmpReady = false;          // DMP initialization status
-static uint8_t _devStatus = 0;          // Device status setelah init
-static uint16_t _packetSize = 0;        // Expected DMP packet size
-static uint8_t _fifoBuffer[64];         // FIFO buffer
-
-// Orientation data structures
-static Quaternion _quaternion;          // Quaternion dari DMP
-static VectorFloat _gravity;            // Gravity vector
-static float _ypr[3];                   // Yaw, Pitch, Roll array
-
-// IMU angles (declared in config.h)
-float imuYaw = 0.0f;                    // Raw yaw (0-360 degrees)
-float imuPitch = 0.0f;                  // Pitch angle
-float imuRoll = 0.0f;                   // Roll angle
-float imuYawOffset = 0.0f;              // Yaw calibration offset
-float imuYawCalibrated = 0.0f;          // Yaw setelah offset (0-360)
-
-// ══════════════════════════════════════════════════════════
 // PRIVATE FUNCTIONS
 // ══════════════════════════════════════════════════════════
 

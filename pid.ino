@@ -170,16 +170,11 @@ void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
   
   // Array untuk simplify loop processing
   float targetRpm[3] = {rpmW1, rpmW2, rpmW3};
-  uint8_t motorIds[3] = {0, 2, 3};  // Motor 1, 3, 4 (skip motor 2)
+  uint8_t motorIds[3] = {0, 1, 2};  // Motor 1, 2, 3 (skip motor 4)
   uint8_t pidChannels[3] = {
     PidChannel::WHEEL1_RPM,
     PidChannel::WHEEL2_RPM,
     PidChannel::WHEEL3_RPM
-  };
-  uint16_t minPwm[3] = {
-    Tuning::MIN_PWM_WHEEL1,
-    Tuning::MIN_PWM_WHEEL2,
-    Tuning::MIN_PWM_WHEEL3
   };
   
   // Process each wheel
@@ -204,12 +199,6 @@ void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
       currentRpm,
       Tuning::RPM_WHEEL
     );
-    
-    // Apply minimum PWM untuk overcome motor deadband
-    // Note: Hanya apply jika target cukup besar (> 20 RPM)
-    if (targetMagnitude > 20.0f && outputMagnitude > 0.0f && outputMagnitude < minPwm[i]) {
-      outputMagnitude = minPwm[i];
-    }
     
     // Apply direction sign
     int16_t pwm = (target > 0.0f) ? (int16_t)outputMagnitude : -(int16_t)outputMagnitude;

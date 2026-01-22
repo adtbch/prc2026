@@ -60,7 +60,7 @@ void debug_printEncoderRpm() {
   Serial.print("RPM - M1:");
   Serial.print(encoderRpm[0], 1);
   Serial.print(" M3:");
-  Serial.print(encoderRpm[2], 1);
+  Serial.print(encoderRpm[1], 1);
   Serial.print(" M4:");
-  Serial.println(encoderRpm[3], 1);
+  Serial.println(encoderRpm[1], 1);
 }

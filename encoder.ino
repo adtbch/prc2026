@@ -32,21 +32,6 @@
 // GLOBAL VARIABLES
 // ══════════════════════════════════════════════════════════
 
-// Encoder pulse counts (signed - bisa negatif untuk reverse)
-volatile long encoderCount[4] = {0, 0, 0, 0};
-
-// Pulse count absolut untuk RPM calculation (selalu positif)
-static volatile unsigned long _encoderPulseCount[4] = {0, 0, 0, 0};
-
-// Current RPM values (updated setiap INTERVAL_MS)
-float encoderRpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-// Last state untuk quadrature decoding
-static uint8_t _lastStateEncoder[4] = {0, 0, 0, 0};
-
-// Timing untuk RPM calculation
-static unsigned long _lastRpmUpdateTime = 0;
-
 // ══════════════════════════════════════════════════════════
 // INTERRUPT SERVICE ROUTINES (ISR)
 // ══════════════════════════════════════════════════════════

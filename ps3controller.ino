@@ -24,37 +24,6 @@
  */
 
 // ══════════════════════════════════════════════════════════
-// GLOBAL VARIABLES
-// ══════════════════════════════════════════════════════════
-
-// Joystick values (-128 to 127, 0 = center)
-int ps3StickLeftX = 0;
-int ps3StickLeftY = 0;
-int ps3StickRightX = 0;
-int ps3StickRightY = 0;
-
-// Connection status
-bool ps3ControllerConnected = false;
-
-// Button states (true = pressed)
-bool ps3ButtonX = false;
-bool ps3ButtonCircle = false;
-bool ps3ButtonTriangle = false;
-bool ps3ButtonSquare = false;
-bool ps3ButtonL1 = false;
-bool ps3ButtonL2 = false;
-bool ps3ButtonL3 = false;
-bool ps3ButtonR1 = false;
-bool ps3ButtonR2 = false;
-bool ps3ButtonR3 = false;
-bool ps3DpadUp = false;
-bool ps3DpadDown = false;
-bool ps3DpadLeft = false;
-bool ps3DpadRight = false;
-bool ps3ButtonSelect = false;
-bool ps3ButtonStart = false;
-
-// ══════════════════════════════════════════════════════════
 // CALLBACK FUNCTIONS (Called by PS3 library)
 // ══════════════════════════════════════════════════════════
 

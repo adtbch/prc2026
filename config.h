@@ -36,31 +36,31 @@ namespace Pin {
   constexpr uint8_t MOTOR1_A  = 1;     // Direction pin A motor 1
   constexpr uint8_t MOTOR1_B  = 3;     // Direction pin B motor 1
   
-  constexpr uint8_t MOTOR2_EN = 5;     // Enable PWM untuk motor 2 (lift/unused)
-  constexpr uint8_t MOTOR2_A  = 0;     // Direction pin A motor 2
-  constexpr uint8_t MOTOR2_B  = 2;     // Direction pin B motor 2
+  constexpr uint8_t MOTOR2_EN = 5;     // Enable PWM untuk motor 2
+  constexpr uint8_t MOTOR2_A  = 19;    // Direction pin A motor 2
+  constexpr uint8_t MOTOR2_B  = 18;    // Direction pin B motor 2
   
   // Motor L298N Module 2 - Control untuk Motor 3 & 4
   constexpr uint8_t MOTOR3_EN = 17;    // Enable PWM untuk motor 3
   constexpr uint8_t MOTOR3_A  = 16;    // Direction pin A motor 3
   constexpr uint8_t MOTOR3_B  = 4;     // Direction pin B motor 3
   
-  constexpr uint8_t MOTOR4_EN = 5;     // Enable PWM untuk motor 4
-  constexpr uint8_t MOTOR4_A  = 19;    // Direction pin A motor 4
-  constexpr uint8_t MOTOR4_B  = 18;    // Direction pin B motor 4
+  constexpr uint8_t MOTOR4_EN = 5;     // Enable PWM untuk motor 4 (lift/unused)
+  constexpr uint8_t MOTOR4_A  = 0;     // Direction pin A motor 4
+  constexpr uint8_t MOTOR4_B  = 2;     // Direction pin B motor 4
   
   // Encoder pins (GPIO yang support interrupt di ESP32)
   constexpr uint8_t ENCODER1_A = 34;   // Encoder motor 1 channel A
   constexpr uint8_t ENCODER1_B = 35;   // Encoder motor 1 channel B
   
-  constexpr uint8_t ENCODER2_A = 25;   // Encoder motor 2 channel A
-  constexpr uint8_t ENCODER2_B = 26;   // Encoder motor 2 channel B
+  constexpr uint8_t ENCODER2_A = 33;   // Encoder motor 2 channel A
+  constexpr uint8_t ENCODER2_B = 32;   // Encoder motor 2 channel B
   
   constexpr uint8_t ENCODER3_A = 27;   // Encoder motor 3 channel A
   constexpr uint8_t ENCODER3_B = 14;   // Encoder motor 3 channel B
   
-  constexpr uint8_t ENCODER4_A = 33;   // Encoder motor 4 channel A
-  constexpr uint8_t ENCODER4_B = 32;   // Encoder motor 4 channel B
+  constexpr uint8_t ENCODER4_A = 25;   // Encoder motor 4 channel A
+  constexpr uint8_t ENCODER4_B = 26;   // Encoder motor 4 channel B
   
   // I2C pins untuk MPU6050 dan LCD (default ESP32)
   // SDA = GPIO 21 (default, tidak perlu define)
@@ -73,7 +73,7 @@ namespace Pin {
 
 namespace Pwm {
   constexpr uint16_t MAX_VALUE = 4095;         // PWM 12-bit resolution
-  constexpr uint16_t FREQUENCY_HZ = 15000;     // 15 kHz - optimal untuk L298N
+  constexpr uint16_t FREQUENCY_HZ = 5000;     // 5 kHz - optimal untuk L298N
   constexpr uint8_t RESOLUTION_BITS = 12;      // 12-bit: 0-4095
   
   // PWM channel assignments (ESP32 punya 16 PWM channels: 0-15)
@@ -82,8 +82,6 @@ namespace Pwm {
   constexpr uint8_t MOTOR3_CHANNEL = 2;
   constexpr uint8_t MOTOR4_CHANNEL = 3;
   
-  // Minimum PWM untuk motor mulai bergerak (deadband compensation)
-  constexpr uint16_t MIN_MOVEMENT_PWM = 2000;  // Motor baru gerak di PWM >= 2000 (12-bit scaled)
 }
 
 namespace Encoder {
@@ -189,11 +187,7 @@ namespace Tuning {
   constexpr float RPM_WHEEL1_SCALE = 1.0f;
   constexpr float RPM_WHEEL2_SCALE = 1.0f;
   constexpr float RPM_WHEEL3_SCALE = 1.0f;
-  
-  // Minimum PWM per-wheel (override global jika perlu)
-  constexpr uint16_t MIN_PWM_WHEEL1 = Pwm::MIN_MOVEMENT_PWM;  // 2000 (12-bit)
-  constexpr uint16_t MIN_PWM_WHEEL2 = Pwm::MIN_MOVEMENT_PWM;  // 2000 (12-bit)
-  constexpr uint16_t MIN_PWM_WHEEL3 = Pwm::MIN_MOVEMENT_PWM;  // 2000 (12-bit)
+
 }
 
 //══════════════════════════════════════════════════════════
@@ -231,5 +225,83 @@ namespace Config {
   // World frame yaw inversion (jika arah rotasi IMU kebalik)
   constexpr bool INVERT_WORLD_YAW = false;
 }
+
+//══════════════════════════════════════════════════════════
+// 6. GLOBAL VARIABLES (Runtime State)
+//══════════════════════════════════════════════════════════
+
+// Encoder pulse counts (signed - bisa negatif untuk reverse)
+volatile long encoderCount[4] = {0, 0, 0, 0};
+
+// Pulse count absolut untuk RPM calculation (selalu positif)
+static volatile unsigned long _encoderPulseCount[4] = {0, 0, 0, 0};
+
+// Current RPM values (updated setiap INTERVAL_MS)
+float encoderRpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+// Last state untuk quadrature decoding
+static uint8_t _lastStateEncoder[4] = {0, 0, 0, 0};
+
+// Timing untuk RPM calculation
+static unsigned long _lastRpmUpdateTime = 0;
+
+
+
+// ══════════════════════════════════════════════════════════
+// GLOBAL VARIABLES
+// ══════════════════════════════════════════════════════════
+
+// Joystick values (-128 to 127, 0 = center)
+int ps3StickLeftX = 0;
+int ps3StickLeftY = 0;
+int ps3StickRightX = 0;
+int ps3StickRightY = 0;
+
+// Connection status
+bool ps3ControllerConnected = false;
+
+// Button states (true = pressed)
+bool ps3ButtonX = false;
+bool ps3ButtonCircle = false;
+bool ps3ButtonTriangle = false;
+bool ps3ButtonSquare = false;
+bool ps3ButtonL1 = false;
+bool ps3ButtonL2 = false;
+bool ps3ButtonL3 = false;
+bool ps3ButtonR1 = false;
+bool ps3ButtonR2 = false;
+bool ps3ButtonR3 = false;
+bool ps3DpadUp = false;
+bool ps3DpadDown = false;
+bool ps3DpadLeft = false;
+bool ps3DpadRight = false;
+bool ps3ButtonSelect = false;
+bool ps3ButtonStart = false;
+
+
+// ══════════════════════════════════════════════════════════
+// GLOBAL VARIABLES
+// ══════════════════════════════════════════════════════════
+
+// MPU object
+static MPU6050 _mpu;
+
+// MPU control/status
+static bool _dmpReady = false;          // DMP initialization status
+static uint8_t _devStatus = 0;          // Device status setelah init
+static uint16_t _packetSize = 0;        // Expected DMP packet size
+static uint8_t _fifoBuffer[64];         // FIFO buffer
+
+// Orientation data structures
+static Quaternion _quaternion;          // Quaternion dari DMP
+static VectorFloat _gravity;            // Gravity vector
+static float _ypr[3];                   // Yaw, Pitch, Roll array
+
+// IMU angles (declared in config.h)
+float imuYaw = 0.0f;                    // Raw yaw (0-360 degrees)
+float imuPitch = 0.0f;                  // Pitch angle
+float imuRoll = 0.0f;                   // Roll angle
+float imuYawOffset = 0.0f;              // Yaw calibration offset
+float imuYawCalibrated = 0.0f;          // Yaw setelah offset (0-360)
 
 #endif // CONFIG_H
