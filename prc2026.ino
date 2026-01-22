@@ -51,6 +51,11 @@ void setup() {
   // lcd_debugInit("PID Ctrl", true);
   control_initializePid();
   
+  // Initialize kinematics system untuk field-centric control
+  lcd_debugMessage("Init Kinematic", "Kalman filter");
+  kinematics_initialize();
+  delay(500);
+  
   // Initialize PID storage system
   // lcd_debugInit("PID Store", true);
   storage_initializePidPreferences();
@@ -78,28 +83,25 @@ void loop() {
   // Update IMU untuk yaw angle (diperlukan untuk global frame control)
   hardware_updateImu();
   
-  // CRITICAL: Periodic IMU health check (every 10 seconds)
-  // Re-initialize jika IMU failure detected
-  static uint32_t lastImuHealthCheck = 0;
-  if (millis() - lastImuHealthCheck >= 10000) {
-    extern bool _dmpReady;
-    if (!_dmpReady) {
-      Serial.println("[HEALTH] IMU not ready - Attempting re-initialization...");
-      lcd_debugMessage("IMU Reinit", "Wait...");
-      
-      if (hardware_initializeImu()) {
-        Serial.println("[HEALTH] IMU re-initialized successfully!");
-        lcd_debugMessage("IMU OK", "Recovered!");
-        delay(1000);
-      } else {
-        Serial.println("[HEALTH] IMU re-init FAILED - Check wiring!");
-      }
-    }
-    lastImuHealthCheck = millis();
-  }
-  
   // Update RPM calculation dari encoder pulses
   hardware_updateEncoderRpm();
+  
+  // Update odometry dengan Kalman filter fusion (encoder + IMU)
+  // Konversi RPM ke rad/s dan hitung dt
+  static uint32_t lastOdoUpdate = 0;
+  uint32_t now = millis();
+  float dt = (now - lastOdoUpdate) / 1000.0f;  // Convert ms to seconds
+  
+  if (dt > 0.001f) {  // Update hanya jika dt > 1ms
+    // Get wheel velocities dalam rad/s dari encoder RPM
+    float wheel_vel[3];
+    wheel_vel[0] = hardware_getEncoderRpm(0) * 0.104719755f;  // RPM to rad/s (2π/60)
+    wheel_vel[1] = hardware_getEncoderRpm(1) * 0.104719755f;
+    wheel_vel[2] = hardware_getEncoderRpm(2) * 0.104719755f;
+    
+    kinematics_updateOdometry(wheel_vel, dt);
+    lastOdoUpdate = now;
+  }
   // ══════════════════════════════════════════════════════════
   // AUTO-TUNING (If active)
   // ══════════════════════════════════════════════════════════
@@ -107,53 +109,12 @@ void loop() {
   // Update auto-tuning state machine jika sedang running
   autotuning_update();
   
-  // CRITICAL: PS3 event loop untuk maintain connection
-  // Tanpa ini, PS3 akan disconnect setelah beberapa detik
-  static bool ps3WasConnectedBefore = false;  // Track connection history
+  // ══════════════════════════════════════════════════════════
+  // PS3 CONNECTION MANAGEMENT
+  // ══════════════════════════════════════════════════════════
   
-  if (Ps3.isConnected()) {
-    // Event sudah di-handle via callbacks, cukup check connection
-    ps3WasConnectedBefore = true;  // Mark that we've been connected
-    yield();  // Yield to Bluetooth stack
-    
-  } else {
-    // Disconnected state
-    
-    // Jika pernah connected sebelumnya, attempt reconnection
-    if (ps3WasConnectedBefore) {
-      static uint32_t lastReconnectAttempt = 0;
-      static uint8_t reconnectAttemptCount = 0;
-      
-      if (millis() - lastReconnectAttempt >= 5000) {  // Coba setiap 5 detik
-        reconnectAttemptCount++;
-        
-        Serial.printf("[PS3] Disconnected - Reconnect attempt #%d\n", reconnectAttemptCount);
-        lcd_debugMessage("PS3 Disconn", "Reconnecting...");
-        
-        // Strategy 1: Re-initialize PS3 (first 3 attempts)
-        if (reconnectAttemptCount <= 3) {
-          hardware_reinitializePs3();
-          Serial.println("[PS3] Soft reset - Press PS button on controller");
-        }
-        // Strategy 2: Full Bluetooth restart (after 3 failed attempts)
-        else if (reconnectAttemptCount == 4) {
-          Serial.println("[PS3] Multiple failures - Full BT restart");
-          lcd_debugMessage("PS3: Full Reset", "Wait 5s...");
-          hardware_fullBluetoothReset();
-          reconnectAttemptCount = 0;  // Reset counter
-        }
-        
-        lastReconnectAttempt = millis();
-      }
-      
-      // Display periodic reminder
-      static uint32_t lastReminderMsg = 0;
-      if (millis() - lastReminderMsg >= 10000) {  // Every 10 seconds
-        lcd_debugMessage("PS3 Offline", "Press PS Btn");
-        lastReminderMsg = millis();
-      }
-    }
-  }
+  // Handle PS3 connection state dan auto-reconnect
+  ps3_handleConnection();
   
   // Handle PS3 controller commands untuk tuning (non-blocking)
   handlePs3Commands();

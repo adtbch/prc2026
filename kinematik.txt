@@ -1,0 +1,123 @@
+Berikut adalah draf lengkap laporan teknis mengenai analisis kinematika robot tiga roda (*three omni wheels*) yang disusun secara sistematis berdasarkan isi dokumen tersebut. Anda dapat langsung menyalin teks ini ke dalam dokumen Microsoft Word Anda.
+
+---
+
+# ANALISIS KINEMATIKA DAN KONSEP LOKALISASI ROBOT TIGA RODA (THREE OMNI WHEELS)
+
+## 1. Konsep Dasar Kinematika Robot
+
+Kinematika merupakan sebuah rumus atau metode yang digunakan untuk menggerakkan robot dengan cara mengatur kecepatan pada masing-masing motor (aktuator). Pengaturan ini bertujuan untuk menghasilkan nilai kecepatan linear pada sumbu , , dan kecepatan sudut robot ().
+
+Robot dalam penelitian ini menggunakan konfigurasi tiga roda *omni-directional* yang disusun membentuk pola **Y** dengan sudut antar motor sebesar . Karakteristik roda *omni* memungkinkan robot untuk bergerak ke segala arah (maju, mundur, samping) dan berputar di tempat tanpa harus mengubah arah hadap roda secara mekanik.
+
+---
+
+## 2. Perancangan *Inverse Kinematics*
+
+*Inverse kinematics* digunakan untuk menghitung kecepatan yang harus diberikan pada setiap motor () jika diketahui target kecepatan robot ().
+
+### A. Persamaan Matriks Umum
+
+Hubungan antara kecepatan motor dan kecepatan robot dinyatakan dalam persamaan matriks berikut:
+
+### B. Implementasi Berdasarkan Sudut Pemasangan Roda
+
+Berdasarkan desain mekanik, roda terpasang pada sudut  dan . Maka rumus vektor kecepatan untuk masing-masing motor adalah:
+
+* 
+ 
+
+
+* 
+ 
+
+
+* 
+ 
+
+
+
+### C. Konversi Arah Hadap (*Standard Heading*)
+
+Agar arah hadap depan robot sesuai dengan standar koordinat , dilakukan konversi dengan mengurangi sudut pemasangan seluruh roda sebesar . Persamaannya menjadi:
+
+* 
+ 
+
+
+* 
+ 
+
+
+* 
+ 
+
+
+
+---
+
+## 3. Perancangan *Forward Kinematics*
+
+*Forward kinematics* digunakan untuk menentukan kecepatan robot berdasarkan umpan balik dari putaran motor. Rumus pembaliknya adalah sebagai berikut:
+
+* 
+**Kecepatan Horizontal:**  
+
+
+* 
+**Kecepatan Vertikal:**  
+
+
+* 
+**Kecepatan Sudut:**  *(Di mana  adalah jarak roda ke titik pusat robot dalam satuan cm)*.
+
+
+
+---
+
+## 4. Konsep Gyrodometry untuk Lokalisasi
+
+Gyrodometry adalah metode yang menggabungkan data dari *odometry* (dua buah *rotary encoder* eksternal) dengan sensor *gyroscope* untuk mendapatkan posisi robot yang lebih akurat.
+
+### A. Rumus Koordinat Posisi Kartesian
+
+Posisi robot dihitung menggunakan dua *rotary encoder* () yang dipasang pada sudut  dan  dari titik tengah:
+
+* 
+ 
+
+
+* 
+ 
+
+
+
+### B. Penentuan Sudut Hadap (*Heading*)
+
+Sudut hadap robot diambil langsung dari output sensor *gyro* agar tetap stabil meskipun terjadi selip pada roda.
+
+* 
+ (Output sudut sensor *gyro*) 
+
+
+
+### C. Konversi Jarak (Pulsa ke Centimeter)
+
+Untuk mengubah data pulsa *encoder* menjadi satuan cm, digunakan persamaan:
+
+
+*(Keterangan:  = jarak,  = total pulsa,  = pulse per rotation)* .
+
+---
+
+## 5. Analisis Hasil Pengujian
+
+Berdasarkan hasil penelitian, penggunaan metode gyrodometry memberikan stabilitas posisi yang jauh lebih baik dibandingkan metode *odometry* standar. Penerapan metode ini telah memperbaiki kemampuan robot dalam membaca pergerakan sebesar:
+
+* **93%** terhadap koordinat .
+* **94%** terhadap koordinat .
+* **98%** terhadap sudut hadap (*heading*) robot.
+
+---
+
+Apakah Anda ingin saya membantu membuatkan bagian **Daftar Pustaka** secara otomatis agar format laporannya semakin lengkap?

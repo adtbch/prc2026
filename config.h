@@ -176,6 +176,66 @@ namespace Robot {
 }
 
 //══════════════════════════════════════════════════════════
+// 3.5 KINEMATICS PARAMETERS
+//══════════════════════════════════════════════════════════
+
+namespace Kinematics {
+  // ────────────────────────────────────────────────────────
+  // Physical dimensions (dari Robot namespace)
+  // ────────────────────────────────────────────────────────
+  constexpr float WHEEL_RADIUS = Robot::WHEEL_RADIUS_M;           // 0.03 m (30mm)
+  constexpr float WHEEL_BASE_RADIUS = Robot::ROBOT_RADIUS_M;      // 0.12 m (120mm) - L dalam rumus
+  
+  // ────────────────────────────────────────────────────────
+  // Motor & velocity constraints
+  // ────────────────────────────────────────────────────────
+  constexpr float MAX_MOTOR_RPM = 500.0f;                         // Max motor speed (RPM)
+  constexpr float MAX_MOTOR_RAD_S = (MAX_MOTOR_RPM * 2.0f * PI) / 60.0f;  // ~52.36 rad/s
+  constexpr float MIN_WHEEL_SPEED = 0.5f;                         // Minimum wheel speed untuk singularity avoidance (rad/s)
+  
+  // Platform velocity limits
+  constexpr float MAX_PLATFORM_VEL = 1.5f;                        // Max linear velocity (m/s)
+  constexpr float MAX_ANGULAR_VEL = 3.14f;                        // Max angular velocity (rad/s) = 180°/s
+  
+  // Acceleration limits
+  constexpr float MAX_ACCELERATION = 2.0f;                        // Max linear acceleration (m/s²)
+  constexpr float MAX_ANGULAR_ACCEL = 6.28f;                      // Max angular acceleration (rad/s²) = 360°/s²
+  
+  // ────────────────────────────────────────────────────────
+  // Dynamic model parameters
+  // ────────────────────────────────────────────────────────
+  constexpr float ROBOT_MASS = 5.0f;                              // Massa robot (kg) - ADJUST SESUAI ROBOT ASLI
+  constexpr float ROBOT_INERTIA = 0.15f;                          // Momen inersia (kg·m²) - I = m*r² untuk disk
+  
+  // Friction coefficients (untuk dynamic model)
+  constexpr float FRICTION_STATIC = 0.7f;                         // Static friction coefficient
+  constexpr float FRICTION_KINETIC = 0.5f;                        // Kinetic friction coefficient
+  
+  // ────────────────────────────────────────────────────────
+  // Kalman filter parameters
+  // ────────────────────────────────────────────────────────
+  // Process noise covariance (model uncertainty)
+  constexpr float KALMAN_Q_XY = 0.01f;                            // Process noise untuk X & Y (m²)
+  constexpr float KALMAN_Q_THETA = 0.001f;                        // Process noise untuk theta (rad²)
+  
+  // Measurement noise covariance (sensor uncertainty)
+  constexpr float KALMAN_R_XY = 0.05f;                            // Encoder measurement noise (m²)
+  
+  // ────────────────────────────────────────────────────────
+  // Slip detection & compensation
+  // ────────────────────────────────────────────────────────
+  constexpr float SLIP_THRESHOLD = 0.15f;                         // Warning jika slip > 15%
+  constexpr uint32_t SLIP_CHECK_INTERVAL = 200;                  // Check slip setiap 200ms
+  
+  // ────────────────────────────────────────────────────────
+  // Jacobian matrix elements (pre-calculated constants)
+  // ────────────────────────────────────────────────────────
+  // Untuk 3 roda pada 30°, 150°, 270° (120° spacing)
+  constexpr float SQRT3_2 = 0.866025404f;                         // √3/2 untuk Jacobian
+  constexpr float SQRT3 = 1.732050808f;                           // √3 untuk forward kinematics
+}
+
+//══════════════════════════════════════════════════════════
 // 4. PID TUNING PARAMETERS
 //══════════════════════════════════════════════════════════
 

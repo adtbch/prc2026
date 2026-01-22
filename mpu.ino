@@ -63,18 +63,13 @@ bool hardware_initializeImu() {
   Wire.setClock(Imu::I2C_CLOCK_HZ);
   
   // Initialize MPU6050
-  Serial.println("Initializing MPU6050...");
+  Serial.println("[MPU] Initializing MPU6050...");
   _mpu.initialize();
   
-  // Verify connection
-  if (!_mpu.testConnection()) {
-    Serial.println("MPU6050 connection failed!");
-    return false;
-  }
-  Serial.println("MPU6050 connection successful");
-  
   // Load DMP firmware
-  Serial.println("Loading DMP firmware...");
+  // Note: Tidak perlu testConnection() karena bisa false positive
+  // DMP init status yang akan validate connection
+  Serial.println("[MPU] Loading DMP firmware...");
   _devStatus = _mpu.dmpInitialize();
   
   // Set gyro/accel offsets (dari kalibrasi)
@@ -86,24 +81,28 @@ bool hardware_initializeImu() {
   // Check DMP init status
   if (_devStatus == 0) {
     // DMP ready - calibrate dan enable
-    Serial.println("Calibrating DMP...");
+    Serial.println("[MPU] DMP init successful! Calibrating...");
     _mpu.CalibrateAccel(6);
     _mpu.CalibrateGyro(6);
     _mpu.PrintActiveOffsets();
     
-    Serial.println("Enabling DMP...");
+    Serial.println("[MPU] Enabling DMP...");
     _mpu.setDMPEnabled(true);
     
     _packetSize = _mpu.dmpGetFIFOPacketSize();
     _dmpReady = true;
     
-    Serial.println("DMP ready!");
+    Serial.println("[MPU] DMP ready! IMU is operational.");
     return true;
     
   } else {
     // DMP init failed
-    Serial.print("DMP init failed! Error code: ");
+    Serial.print("[MPU] ERROR: DMP initialization failed! Error code: ");
     Serial.println(_devStatus);
+    Serial.println("[MPU] Possible causes:");
+    Serial.println("[MPU]   - I2C wiring issue (check SDA/SCL)");
+    Serial.println("[MPU]   - MPU6050 not powered");
+    Serial.println("[MPU]   - Wrong I2C address (should be 0x68)");
     return false;
   }
 }

@@ -15,6 +15,7 @@
  * PUBLIC FUNCTIONS:
  * - hardware_initializePs3()
  * - hardware_isPs3Connected()
+ * - ps3_handleConnection() - Auto-reconnect logic
  * 
  * GLOBALS:
  * - ps3StickLeftX, ps3StickLeftY (joystick values)
@@ -22,6 +23,16 @@
  * 
  * ============================================================
  */
+
+// ══════════════════════════════════════════════════════════
+// CONNECTION STATE TRACKING
+// ══════════════════════════════════════════════════════════
+
+// Track koneksi PS3 untuk reconnection logic
+static bool ps3WasConnectedBefore = false;
+static uint32_t lastReconnectAttempt = 0;
+static uint8_t reconnectAttemptCount = 0;
+static uint32_t lastReminderMsg = 0;
 
 // ══════════════════════════════════════════════════════════
 // CALLBACK FUNCTIONS (Called by PS3 library)
@@ -188,6 +199,102 @@ void hardware_fullBluetoothReset() {
   Serial.println("[PS3] ========================================");
   Serial.println("[PS3] Full reset complete - Press PS button");
   Serial.println("[PS3] ========================================");
+}
+
+// ══════════════════════════════════════════════════════════
+// CONNECTION MANAGEMENT
+// ══════════════════════════════════════════════════════════
+
+/**
+ * Handle PS3 connection state dan reconnection logic
+ * Dipanggil setiap loop untuk maintain connection
+ * 
+ * FEATURES:
+ * - Auto-reconnect saat disconnect
+ * - Multi-stage reconnect strategy (soft → hard reset)
+ * - Periodic status display
+ */
+void ps3_handleConnection() {
+  if (Ps3.isConnected()) {
+    // Controller connected - reset state
+    ps3WasConnectedBefore = true;
+    reconnectAttemptCount = 0;  // Reset attempt counter when connected
+    yield();  // Yield to Bluetooth stack
+    
+  } else {
+    // Controller disconnected - attempt reconnection
+    _ps3_reconnectLogic();
+  }
+}
+
+/**
+ * Internal: Reconnection logic saat PS3 disconnect
+ * 
+ * STRATEGY:
+ * 1. Soft reset (3x attempts) - re-initialize PS3
+ * 2. Hard reset (after 3 fails) - full BT restart
+ */
+void _ps3_reconnectLogic() {
+  // Hanya reconnect jika pernah connected sebelumnya
+  if (!ps3WasConnectedBefore) {
+    return;
+  }
+  
+  // Check interval untuk reconnect attempt (5 detik)
+  if (millis() - lastReconnectAttempt >= 5000) {
+    reconnectAttemptCount++;
+    
+    Serial.printf("[PS3] Disconnected - Reconnect attempt #%d\n", reconnectAttemptCount);
+    lcd_debugMessage("PS3 Disconn", "Reconnecting...");
+    
+    // Strategy 1: Soft reset (first 3 attempts)
+    if (reconnectAttemptCount <= 3) {
+      hardware_reinitializePs3();
+      Serial.println("[PS3] Soft reset - Press PS button on controller");
+    }
+    // Strategy 2: Hard reset (after 3 failed attempts)
+    else if (reconnectAttemptCount == 4) {
+      Serial.println("[PS3] Multiple failures - Full BT restart");
+      lcd_debugMessage("PS3: Full Reset", "Wait 5s...");
+      hardware_fullBluetoothReset();
+      reconnectAttemptCount = 0;  // Reset counter after hard reset
+    }
+    
+    lastReconnectAttempt = millis();
+  }
+  
+  // Display periodic reminder (setiap 10 detik)
+  _ps3_displayReminder();
+}
+
+/**
+ * Internal: Display periodic reminder untuk press PS button
+ */
+void _ps3_displayReminder() {
+  if (millis() - lastReminderMsg >= 10000) {  // Every 10 seconds
+    lcd_debugMessage("PS3 Offline", "Press PS Btn");
+    lastReminderMsg = millis();
+  }
+}
+
+/**
+ * Reset PS3 connection state
+ * Berguna untuk force reconnection atau clear state
+ */
+void ps3_resetConnectionState() {
+  ps3WasConnectedBefore = false;
+  reconnectAttemptCount = 0;
+  lastReconnectAttempt = 0;
+  lastReminderMsg = 0;
+  Serial.println("[PS3] Connection state reset");
+}
+
+/**
+ * Get connection attempt count
+ * @return Number of reconnection attempts
+ */
+uint8_t ps3_getReconnectAttempts() {
+  return reconnectAttemptCount;
 }
 
 /**
