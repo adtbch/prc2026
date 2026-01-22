@@ -1,95 +1,199 @@
-#include "config.h"
-#include <MPU6050_6Axis_MotionApps20.h>
+/**
+ * ============================================================
+ * FILE: mpu.ino  
+ * LAYER: Hardware Abstraction Layer
+ * ============================================================
+ * 
+ * DESCRIPTION:
+ * MPU6050 6-axis IMU dengan Digital Motion Processor (DMP).
+ * Menyediakan stable yaw/pitch/roll untuk navigation dan odometry.
+ * 
+ * FEATURES:
+ * - DMP untuk sensor fusion (gyro + accel)
+ * - Quaternion-based orientation (no gimbal lock)
+ * - Yaw calibration support
+ * 
+ * HARDWARE:
+ * - MPU6050 via I2C (address 0x68)
+ * - DMP firmware loaded to MPU
+ * 
+ * PUBLIC FUNCTIONS:
+ * - hardware_initializeImu()
+ * - hardware_updateImu()
+ * - hardware_calibrateImuYaw()
+ * - hardware_getImuYaw()
+ * 
+ * ============================================================
+ */
 
-// Objek MPU6050
-MPU6050 mpu;
+// ══════════════════════════════════════════════════════════
+// GLOBAL VARIABLES
+// ══════════════════════════════════════════════════════════
 
-// MPU control/status vars
-bool dmpReady = false;
-uint8_t mpuIntStatus;
-uint8_t devStatus;
-uint16_t packetSize;
-uint16_t fifoCount;
-uint8_t fifoBuffer[64];
+// MPU object
+static MPU6050 _mpu;
 
-// Orientation/motion vars
-Quaternion q;
-VectorFloat gravity;
-float ypr[3];
+// MPU control/status
+static bool _dmpReady = false;          // DMP initialization status
+static uint8_t _devStatus = 0;          // Device status setelah init
+static uint16_t _packetSize = 0;        // Expected DMP packet size
+static uint8_t _fifoBuffer[64];         // FIFO buffer
 
-// Variabel global yaw, pitch, roll
-float yaw = 0;
-float pitch = 0;
-float roll = 0;
-float yaw0 = 0;  // Nilai offset/kalibrasi yaw
-float yaw1 = 0;  // Yaw setelah dikurangi offset
+// Orientation data structures
+static Quaternion _quaternion;          // Quaternion dari DMP
+static VectorFloat _gravity;            // Gravity vector
+static float _ypr[3];                   // Yaw, Pitch, Roll array
 
-void setupMPU() {
-  // Initialize I2C
-  Wire.begin();
-  Wire.setClock(400000); // 400kHz I2C clock
+// IMU angles (declared in config.h)
+float imuYaw = 0.0f;                    // Raw yaw (0-360 degrees)
+float imuPitch = 0.0f;                  // Pitch angle
+float imuRoll = 0.0f;                   // Roll angle
+float imuYawOffset = 0.0f;              // Yaw calibration offset
+float imuYawCalibrated = 0.0f;          // Yaw setelah offset (0-360)
 
-  // Initialize MPU6050
-  mpu.initialize();
+// ══════════════════════════════════════════════════════════
+// PRIVATE FUNCTIONS
+// ══════════════════════════════════════════════════════════
 
-  // Load and configure the DMP
-  devStatus = mpu.dmpInitialize();
-
-  // Supply your own gyro offsets here, scaled for min sensitivity
-  mpu.setXGyroOffset(220);
-  mpu.setYGyroOffset(76);
-  mpu.setZGyroOffset(-85);
-  mpu.setZAccelOffset(1788);
-
-  // Make sure it worked (returns 0 if so)
-  if (devStatus == 0) {
-    // Calibration Time: generate offsets and calibrate our MPU6050
-    mpu.CalibrateAccel(6);
-    mpu.CalibrateGyro(6);
-    mpu.PrintActiveOffsets();
-    
-    // Turn on the DMP, now that it's ready
-    mpu.setDMPEnabled(true);
-
-    mpuIntStatus = mpu.getIntStatus();
-    dmpReady = true;
-    packetSize = mpu.dmpGetFIFOPacketSize();
-  }
-}
-
-void mpu6500() {
-  if (!dmpReady) return;
-  
-  if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) {
-    mpu.dmpGetQuaternion(&q, fifoBuffer);
-    mpu.dmpGetGravity(&gravity, &q);
-    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    
-    yaw = ypr[0] * 180 / M_PI;
-    pitch = ypr[1] * 180 / M_PI;
-    roll = ypr[2] * 180 / M_PI;
-    
-    yaw = normalizeAngle(yaw, 0, 360);
-    yaw1 = yaw - yaw0;
-    yaw1 = normalizeAngle(yaw1, 0, 360);
-  }
-}
-
-float degToRad(float deg) {
-  return deg * (PI / 180.0);
-}
-
-float normalizeAngle(float angle, float minAngle, float maxAngle) {
-  float range = maxAngle - minAngle;
-  // Pakai while agar aman walaupun angle jauh di luar range (mis. drift/offset besar)
-  while (angle < minAngle) angle += range;
-  while (angle >= maxAngle) angle -= range;
+/**
+ * @brief Normalize angle ke range 0-360 degrees
+ * 
+ * @param angle Angle in degrees (bisa di luar range 0-360)
+ * @return Normalized angle (0-360)
+ */
+static inline float _imu_normalizeAngle360(float angle) {
+  while (angle < 0.0f) angle += 360.0f;
+  while (angle >= 360.0f) angle -= 360.0f;
   return angle;
 }
 
-// Fungsi untuk reset yaw (kalibrasi)
-void resetYaw() {
-  yaw0 = yaw;
-  yaw1 = 0;
+// ══════════════════════════════════════════════════════════
+// PUBLIC FUNCTIONS
+// ══════════════════════════════════════════════════════════
+
+/**
+ * @brief Initialize MPU6050 dan load DMP firmware
+ * 
+ * Steps:
+ * 1. Initialize I2C communication
+ * 2. Reset MPU dan load DMP firmware
+ * 3. Set gyro/accel offsets (kalibrasi)
+ * 4. Enable DMP
+ * 
+ * @return true jika berhasil, false jika gagal
+ */
+bool hardware_initializeImu() {
+  // Initialize I2C
+  Wire.begin();
+  Wire.setClock(Imu::I2C_CLOCK_HZ);
+  
+  // Initialize MPU6050
+  Serial.println("Initializing MPU6050...");
+  _mpu.initialize();
+  
+  // Verify connection
+  if (!_mpu.testConnection()) {
+    Serial.println("MPU6050 connection failed!");
+    return false;
+  }
+  Serial.println("MPU6050 connection successful");
+  
+  // Load DMP firmware
+  Serial.println("Loading DMP firmware...");
+  _devStatus = _mpu.dmpInitialize();
+  
+  // Set gyro/accel offsets (dari kalibrasi)
+  _mpu.setXGyroOffset(Imu::GYRO_OFFSET_X);
+  _mpu.setYGyroOffset(Imu::GYRO_OFFSET_Y);
+  _mpu.setZGyroOffset(Imu::GYRO_OFFSET_Z);
+  _mpu.setZAccelOffset(Imu::ACCEL_OFFSET_Z);
+  
+  // Check DMP init status
+  if (_devStatus == 0) {
+    // DMP ready - calibrate dan enable
+    Serial.println("Calibrating DMP...");
+    _mpu.CalibrateAccel(6);
+    _mpu.CalibrateGyro(6);
+    _mpu.PrintActiveOffsets();
+    
+    Serial.println("Enabling DMP...");
+    _mpu.setDMPEnabled(true);
+    
+    _packetSize = _mpu.dmpGetFIFOPacketSize();
+    _dmpReady = true;
+    
+    Serial.println("DMP ready!");
+    return true;
+    
+  } else {
+    // DMP init failed
+    Serial.print("DMP init failed! Error code: ");
+    Serial.println(_devStatus);
+    return false;
+  }
 }
 
+/**
+ * @brief Update IMU readings dari DMP
+ * 
+ * Membaca data dari FIFO, extract quaternion, dan convert ke Euler angles.
+ * Dipanggil setiap cycle di loop() untuk real-time orientation tracking.
+ * 
+ * Formula konversi: Quaternion -> Yaw/Pitch/Roll
+ */
+void hardware_updateImu() {
+  // Skip jika DMP tidak ready
+  if (!_dmpReady) return;
+  
+  // Read packet dari FIFO
+  if (_mpu.dmpGetCurrentFIFOPacket(_fifoBuffer)) {
+    // Extract quaternion
+    _mpu.dmpGetQuaternion(&_quaternion, _fifoBuffer);
+    
+    // Extract gravity vector
+    _mpu.dmpGetGravity(&_gravity, &_quaternion);
+    
+    // Convert quaternion -> Euler angles (yaw, pitch, roll)
+    _mpu.dmpGetYawPitchRoll(_ypr, &_quaternion, &_gravity);
+    
+    // Convert radians ke degrees
+    imuYaw = _ypr[0] * 180.0f / PI;
+    imuPitch = _ypr[1] * 180.0f / PI;
+    imuRoll = _ypr[2] * 180.0f / PI;
+    
+    // Normalize yaw ke 0-360
+    imuYaw = _imu_normalizeAngle360(imuYaw);
+    
+    // Apply calibration offset
+    imuYawCalibrated = imuYaw - imuYawOffset;
+    imuYawCalibrated = _imu_normalizeAngle360(imuYawCalibrated);
+  }
+}
+
+/**
+ * @brief Calibrate yaw offset (set current yaw sebagai 0)
+ * 
+ * Berguna untuk:
+ * - Reset heading ke 0 di awal program
+ * - Re-calibrate jika robot di-geser secara manual
+ * 
+ * Cara pakai:
+ * 1. Posisikan robot menghadap ke arah yang diinginkan sebagai 0°
+ * 2. Call fungsi ini
+ * 3. Yaw akan ter-reset ke 0°
+ */
+void hardware_calibrateImuYaw() {
+  imuYawOffset = imuYaw;
+  imuYawCalibrated = 0.0f;
+  Serial.print("IMU Yaw calibrated. Offset: ");
+  Serial.println(imuYawOffset);
+}
+
+/**
+ * @brief Get calibrated yaw angle
+ * 
+ * @return Yaw angle setelah offset (0-360 degrees)
+ */
+float hardware_getImuYaw() {
+  return imuYawCalibrated;
+}

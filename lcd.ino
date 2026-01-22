@@ -1,153 +1,137 @@
-#include "config.h"
-#include <LiquidCrystal_I2C.h>
+/**
+ * ============================================================
+ * FILE: lcd.ino
+ * LAYER: Hardware Abstraction Layer
+ * ============================================================
+ * 
+ * DESCRIPTION:
+ * LCD 16x2 I2C untuk display status robot.
+ * Menampilkan odometry, RPM, mode, dan debug info.
+ * 
+ * HARDWARE:
+ * - LCD 16x2 with I2C backpack (PCF8574)
+ * - I2C Address: 0x27 (default)
+ * 
+ * PUBLIC FUNCTIONS:
+ * - hardware_initializeLcd()
+ * - lcd_clear()
+ * - lcd_showMessage(line1, line2)
+ * - lcd_printAt(col, row, text)
+ * - lcd_printFloatAt(col, row, value, decimals)
+ * - lcd_displayRobotStatus()
+ * 
+ * ============================================================
+ */
 
-// Inisialisasi LCD 16x2 dengan alamat I2C 0x68
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+// External variables dari file lain
+extern float encoderRpm[4];
+extern float imuYawCalibrated;
+extern bool ps3ControllerConnected;
 
-void initLCD() {
-  lcd.init();
-  lcd.backlight();
-  lcd.setCursor(0, 0);
-  lcd.print("PRC2026 Encoder");
-  lcd.setCursor(0, 1);
-  lcd.print("Initializing...");
-  delay(1000);
-  lcd.clear();
+// ══════════════════════════════════════════════════════════
+// GLOBAL VARIABLES
+// ══════════════════════════════════════════════════════════
+
+// LCD object (address, columns, rows)
+static LiquidCrystal_I2C _lcd(Lcd::I2C_ADDRESS, Lcd::COLUMNS, Lcd::ROWS);
+
+// ══════════════════════════════════════════════════════════
+// PUBLIC FUNCTIONS
+// ══════════════════════════════════════════════════════════
+
+/**
+ * @brief Initialize LCD display
+ * 
+ * Setup I2C communication dan tampilkan splash screen
+ */
+void hardware_initializeLcd() {
+  _lcd.init();
+  _lcd.backlight();
+  
+  // Splash screen
+  _lcd.setCursor(0, 0);
+  _lcd.print("PRC2026 Robot");
+  _lcd.setCursor(0, 1);
+  _lcd.print("Initializing...");
 }
 
-void displayEncoderStatus() {
-  // Baris 1: Motor 1 dan Motor 2
-  lcd.setCursor(0, 0);
-  lcd.print("M1:");
-  lcd.print(encoder1Count);
-  lcd.print("    "); // Padding untuk clear sisa karakter
-  lcd.setCursor(8, 0);
-  lcd.print("M2:");
-  lcd.print(encoder2Count);
-  lcd.print("    ");
-
-  // Baris 2: Motor 3 dan Motor 4
-  lcd.setCursor(0, 1);
-  lcd.print("M3:");
-  lcd.print(encoder3Count);
-  lcd.print("    ");
-  lcd.setCursor(8, 1);
-  lcd.print("M4:");
-  lcd.print(encoder4Count);
-  lcd.print("    ");
+/**
+ * @brief Clear LCD screen
+ */
+void lcd_clear() {
+  _lcd.clear();
 }
 
-void displayRpmStatus() {
-  // Baris 1: RPM Motor 1 dan Motor 2
-  lcd.setCursor(0, 0);
-  lcd.print("M1:");
-  lcd.print((int)getRPM_Motor1());
-  lcd.print("    "); // Padding untuk clear sisa karakter
-  lcd.setCursor(8, 0);
-  lcd.print("M2:");
-  lcd.print((int)getRPM_Motor2());
-  lcd.print("    ");
-
-  // Baris 2: RPM Motor 3 dan Motor 4
-  lcd.setCursor(0, 1);
-  lcd.print("M3:");
-  lcd.print((int)getRPM_Motor3());
-  lcd.print("    ");
-  lcd.setCursor(8, 1);
-  lcd.print("M4:");
-  lcd.print((int)getRPM_Motor4());
-  lcd.print("    ");
+/**
+ * @brief Tampilkan 2 baris text (centered untuk LCD 16x2)
+ * 
+ * @param line1 Text untuk baris pertama
+ * @param line2 Text untuk baris kedua
+ */
+void lcd_showMessage(const char* line1, const char* line2) {
+  _lcd.clear();
+  _lcd.setCursor(0, 0);
+  _lcd.print(line1);
+  _lcd.setCursor(0, 1);
+  _lcd.print(line2);
 }
 
-void displayYawStatus() {
-  // Baris 1: Yaw
-  lcd.setCursor(0, 0);
-  lcd.print("Yaw: ");
-  // Tampilkan juga versi "signed" supaya 340 terbaca sebagai -20 (lebih gampang dipahami saat target=0)
-  float y = yaw1;
-  if (y > 180.0f) y -= 360.0f;
-  lcd.print((int)y);
-  lcd.print(" deg    "); // Padding untuk clear sisa karakter
-
-  // Baris 2: RPM Motor 1 dan Motor 2 (ringkas)
-  lcd.setCursor(0, 1);
-  lcd.print("M1:");
-  lcd.print((int)getRPM_Motor1());
-  lcd.print(" M2:");
-  lcd.print((int)getRPM_Motor2());
-  lcd.print("    ");
+/**
+ * @brief Print text di posisi tertentu
+ * 
+ * @param col Column (0-15 untuk LCD 16x2)
+ * @param row Row (0-1 untuk LCD 16x2)
+ * @param text Text string
+ */
+void lcd_printAt(uint8_t col, uint8_t row, const char* text) {
+  _lcd.setCursor(col, row);
+  _lcd.print(text);
 }
 
-// Odom + arah encoder M3/M4:
-// - Baris 1: X dan Y (cm)
-// - Baris 2: dM3 dan dM4 (delta count terakhir)
-void displayOdomStatus() {
-  // Konversi ke cm biar enak dibaca
+/**
+ * @brief Print float value di posisi tertentu
+ * 
+ * @param col Column
+ * @param row Row
+ * @param value Float value
+ * @param decimals Jumlah desimal (0-3)
+ */
+void lcd_printFloatAt(uint8_t col, uint8_t row, float value, uint8_t decimals) {
+  _lcd.setCursor(col, row);
+  _lcd.print(value, decimals);
+}
 
-  lcd.setCursor(0, 0);
-  lcd.print(cmdX);
-  lcd.print(" ");
-  lcd.print(cmdY);
-  lcd.print(" ");
-  lcd.print(cmdW);
-  lcd.print(" | ");
-  // lcd.print("X:");
-  // lcd.print((int)x_cm);
-  // lcd.print(" Y:");
-  // lcd.print((int)y_cm);
-  // tampilkan yaw juga
-  lcd.print("Yaw:");
-  float y = yaw1;
-  if (y > 180.0f) y -= 360.0f;
-  lcd.print((int)y);
-  lcd.print("     "); // padding
-  // Baris 2: bergantian tampil (d3/d4) dan (waypoint target)
-  static unsigned long lastToggleMs = 0;
-  static bool showWaypoint = false;
-  unsigned long now = millis();
-  if (now - lastToggleMs >= 1000) {
-    lastToggleMs = now;
-    showWaypoint = !showWaypoint;
+/**
+ * @brief Display robot status (dipanggil setiap 200ms)
+ * 
+ * Format LCD 16x2:
+ * Line 1: X, Y position (cm)
+ * Line 2: Yaw angle, PS3 connection status
+ */
+void lcd_displayRobotStatus() {
+  // Line 1: Encoder RPM
+  _lcd.setCursor(0, 0);
+  _lcd.print("M1:");
+  _lcd.print((int)encoderRpm[0]);
+  _lcd.print(" M3:");
+  _lcd.print((int)encoderRpm[2]);
+  _lcd.print("    ");  // Clear sisa karakter
+  
+  // Line 2: IMU Yaw dan PS3 connection status
+  _lcd.setCursor(0, 1);
+  _lcd.print("Y:");
+  
+  // Tampilkan yaw dalam format signed (-180 to +180)
+  float yawSigned = imuYawCalibrated;
+  if (yawSigned > 180.0f) yawSigned -= 360.0f;
+  _lcd.print((int)yawSigned);
+  _lcd.print(" ");
+  
+  // PS3 connection indicator
+  if (ps3ControllerConnected) {
+    _lcd.print("[PS3]");
+  } else {
+    _lcd.print("     ");
   }
-
-  lcd.setCursor(0, 1);
-
-  int idx = getActiveWaypointIndex();
-  lcd.print(rpmX);
-  lcd.print(" ");
-  lcd.print(rpmY);
-  lcd.print(" ");
-  lcd.print(rpmW);
-  lcd.print(" | ");
-  // modeSpeed
-  // lcd.print("Mode:");
-  lcd.print(modeSpeed);
-  lcd.print(" ");
-
-#if WAYPOINT_UNITS_CM
-  // sudah cm
-  int tx_cm = (int)(getActiveWaypointX());
-  int ty_cm = (int)(getActiveWaypointY());
-  lcd.print("X");
-  lcd.print(tx_cm);
-  lcd.print(" Y");
-  lcd.print(ty_cm);
-#elif WAYPOINT_UNITS_MM
-  // mm -> cm
-  int tx_cm = (int)(getActiveWaypointX() / 10.0f);
-  int ty_cm = (int)(getActiveWaypointY() / 10.0f);
-  lcd.print("X");
-  lcd.print(tx_cm);
-  lcd.print(" Y");
-  lcd.print(ty_cm);
-#else
-  // meter -> cm
-  int tx_cm = (int)(getActiveWaypointX() * 100.0f);
-  int ty_cm = (int)(getActiveWaypointY() * 100.0f);
-  lcd.print("X");
-  lcd.print(tx_cm);
-  lcd.print(" Y");
-  lcd.print(ty_cm);
-#endif
-  lcd.print("   ");
+  _lcd.print("   ");  // Clear sisa
 }

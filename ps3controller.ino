@@ -1,64 +1,172 @@
-#include <Arduino.h>
-#include <Ps3Controller.h>  
+/**
+ * ============================================================
+ * FILE: ps3controller.ino
+ * LAYER: Hardware Abstraction Layer
+ * ============================================================
+ * 
+ * DESCRIPTION:
+ * PS3 DualShock controller interface via Bluetooth.
+ * Menyediakan joystick dan button inputs untuk manual control.
+ * 
+ * HARDWARE:
+ * - PS3 DualShock 3 controller
+ * - ESP32 Bluetooth
+ * 
+ * PUBLIC FUNCTIONS:
+ * - hardware_initializePs3()
+ * - hardware_isPs3Connected()
+ * 
+ * GLOBALS:
+ * - ps3StickLeftX, ps3StickLeftY (joystick values)
+ * - ps3Button* (button states)
+ * 
+ * ============================================================
+ */
 
-void onConnect() {
-  psconect = true;
-  Ps3.setPlayer(1);
+// ══════════════════════════════════════════════════════════
+// GLOBAL VARIABLES
+// ══════════════════════════════════════════════════════════
+
+// Joystick values (-128 to 127, 0 = center)
+int ps3StickLeftX = 0;
+int ps3StickLeftY = 0;
+int ps3StickRightX = 0;
+int ps3StickRightY = 0;
+
+// Connection status
+bool ps3ControllerConnected = false;
+
+// Button states (true = pressed)
+bool ps3ButtonX = false;
+bool ps3ButtonCircle = false;
+bool ps3ButtonTriangle = false;
+bool ps3ButtonSquare = false;
+bool ps3ButtonL1 = false;
+bool ps3ButtonL2 = false;
+bool ps3ButtonL3 = false;
+bool ps3ButtonR1 = false;
+bool ps3ButtonR2 = false;
+bool ps3ButtonR3 = false;
+bool ps3DpadUp = false;
+bool ps3DpadDown = false;
+bool ps3DpadLeft = false;
+bool ps3DpadRight = false;
+bool ps3ButtonSelect = false;
+bool ps3ButtonStart = false;
+
+// ══════════════════════════════════════════════════════════
+// CALLBACK FUNCTIONS (Called by PS3 library)
+// ══════════════════════════════════════════════════════════
+
+/**
+ * @brief Callback saat PS3 controller connected
+ */
+static void _ps3_onConnect() {
+  ps3ControllerConnected = true;
+  Ps3.setPlayer(1);  // Set LED indicator ke player 1
+  Serial.println("PS3 Controller Connected!");
 }
 
-void onDisConnect() {
-  psconect = false;
-  xL = 0;
-  yL = 0;
-  xR = 0;
-  yR = 0;
-  X = 0;
-  S = 0;
-  T = 0;
-  C = 0;
-  up = 0;
-  dw = 0;
-  lf = 0;
-  rg = 0;
-  L1 = 0;
-  L2 = 0;
-  L3 = 0;
-  R1 = 0;
-  R2 = 0;
-  R3 = 0;
-  SELECT = 0;
-  START = 0;
-}
-void notify() {
-  xR = Ps3.data.analog.stick.rx;   // Right stick - x axis
-  yR = -Ps3.data.analog.stick.ry;  // Right stick - y axis
-  xL = Ps3.data.analog.stick.lx;   // Left stick - x axis
-  yL = -Ps3.data.analog.stick.ly;  // Left stick - y axis
-
-  X = Ps3.data.button.cross;
-  S = Ps3.data.button.square;
-  T = Ps3.data.button.triangle;
-  C = Ps3.data.button.circle;
-
-  up = Ps3.data.button.up;
-  dw = Ps3.data.button.down;
-  lf = Ps3.data.button.left;
-  rg = Ps3.data.button.right;
-
-  L1 = Ps3.data.button.l1;
-  L2 = Ps3.data.button.l2;
-  L3 = Ps3.data.button.l3;
-  R1 = Ps3.data.button.r1;
-  R2 = Ps3.data.button.r2;
-  R3 = Ps3.data.button.r3;
-
-  SELECT = Ps3.data.button.select;
-  START = Ps3.data.button.start;
+/**
+ * @brief Callback saat PS3 controller disconnected
+ * 
+ * Reset semua input ke neutral/0 untuk safety
+ */
+static void _ps3_onDisconnect() {
+  ps3ControllerConnected = false;
+  
+  // Reset joysticks
+  ps3StickLeftX = 0;
+  ps3StickLeftY = 0;
+  ps3StickRightX = 0;
+  ps3StickRightY = 0;
+  
+  // Reset buttons
+  ps3ButtonX = false;
+  ps3ButtonCircle = false;
+  ps3ButtonTriangle = false;
+  ps3ButtonSquare = false;
+  ps3ButtonL1 = false;
+  ps3ButtonL2 = false;
+  ps3ButtonL3 = false;
+  ps3ButtonR1 = false;
+  ps3ButtonR2 = false;
+  ps3ButtonR3 = false;
+  ps3DpadUp = false;
+  ps3DpadDown = false;
+  ps3DpadLeft = false;
+  ps3DpadRight = false;
+  ps3ButtonSelect = false;
+  ps3ButtonStart = false;
+  
+  Serial.println("PS3 Controller Disconnected");
 }
 
-void setupPS3() {
-  Ps3.attach(notify);
-  Ps3.attachOnConnect(onConnect);
-  Ps3.attachOnDisconnect(onDisConnect);
+/**
+ * @brief Callback untuk update data dari controller
+ * 
+ * Dipanggil oleh library saat ada perubahan input.
+ * Copy semua data ke global variables.
+ */
+static void _ps3_onNotify() {
+  // Joystick (note: Y axis inverted untuk match robot convention)
+  ps3StickLeftX = Ps3.data.analog.stick.lx;
+  ps3StickLeftY = -Ps3.data.analog.stick.ly;  // Invert Y (up = positive)
+  ps3StickRightX = Ps3.data.analog.stick.rx;
+  ps3StickRightY = -Ps3.data.analog.stick.ry;
+  
+  // Face buttons
+  ps3ButtonX = Ps3.data.button.cross;
+  ps3ButtonCircle = Ps3.data.button.circle;
+  ps3ButtonTriangle = Ps3.data.button.triangle;
+  ps3ButtonSquare = Ps3.data.button.square;
+  
+  // Shoulder buttons
+  ps3ButtonL1 = Ps3.data.button.l1;
+  ps3ButtonL2 = Ps3.data.button.l2;
+  ps3ButtonL3 = Ps3.data.button.l3;
+  ps3ButtonR1 = Ps3.data.button.r1;
+  ps3ButtonR2 = Ps3.data.button.r2;
+  ps3ButtonR3 = Ps3.data.button.r3;
+  
+  // D-pad
+  ps3DpadUp = Ps3.data.button.up;
+  ps3DpadDown = Ps3.data.button.down;
+  ps3DpadLeft = Ps3.data.button.left;
+  ps3DpadRight = Ps3.data.button.right;
+  
+  // System buttons
+  ps3ButtonSelect = Ps3.data.button.select;
+  ps3ButtonStart = Ps3.data.button.start;
+}
+
+// ══════════════════════════════════════════════════════════
+// PUBLIC FUNCTIONS
+// ══════════════════════════════════════════════════════════
+
+/**
+ * @brief Initialize PS3 controller Bluetooth connection
+ * 
+ * Note: ESP32 MAC address harus di-pair dengan PS3 controller dulu
+ * menggunakan SixaxisPairTool (Windows) atau sixpair (Linux)
+ */
+void hardware_initializePs3() {
+  // Attach callbacks
+  Ps3.attach(_ps3_onNotify);
+  Ps3.attachOnConnect(_ps3_onConnect);
+  Ps3.attachOnDisconnect(_ps3_onDisconnect);
+  
+  // Begin PS3 Bluetooth
   Ps3.begin();
+  
+  Serial.println("PS3 Controller initialized. Waiting for connection...");
+}
+
+/**
+ * @brief Check apakah PS3 controller connected
+ * 
+ * @return true jika connected, false jika tidak
+ */
+bool hardware_isPs3Connected() {
+  return ps3ControllerConnected;
 }
