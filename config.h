@@ -53,14 +53,14 @@ namespace Pin {
   constexpr uint8_t ENCODER1_A = 34;   // Encoder motor 1 channel A
   constexpr uint8_t ENCODER1_B = 35;   // Encoder motor 1 channel B
   
-  constexpr uint8_t ENCODER2_A = 33;   // Encoder motor 2 channel A
-  constexpr uint8_t ENCODER2_B = 32;   // Encoder motor 2 channel B
+  constexpr uint8_t ENCODER2_A = 32;   // Encoder motor 2 channel A
+  constexpr uint8_t ENCODER2_B = 33;   // Encoder motor 2 channel B
   
-  constexpr uint8_t ENCODER3_A = 27;   // Encoder motor 3 channel A
-  constexpr uint8_t ENCODER3_B = 14;   // Encoder motor 3 channel B
+  constexpr uint8_t ENCODER3_A = 14;   // Encoder motor 3 channel A
+  constexpr uint8_t ENCODER3_B = 27;   // Encoder motor 3 channel B
   
-  constexpr uint8_t ENCODER4_A = 25;   // Encoder motor 4 channel A
-  constexpr uint8_t ENCODER4_B = 26;   // Encoder motor 4 channel B
+  constexpr uint8_t ENCODER4_A = 26;   // Encoder motor 4 channel A
+  constexpr uint8_t ENCODER4_B = 25;   // Encoder motor 4 channel B
   
   // I2C pins untuk MPU6050 dan LCD (default ESP32)
   // SDA = GPIO 21 (default, tidak perlu define)

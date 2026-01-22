@@ -107,9 +107,9 @@ void lcd_displayRobotStatus() {
   // Line 1: Encoder RPM
   _lcd.setCursor(0, 0);
   _lcd.print("M1:");
-  _lcd.print((int)encoderRpm[0]);
-  _lcd.print(" M3:");
-  _lcd.print((int)encoderRpm[2]);
+  _lcd.print((int)encoderCount[0]);
+  _lcd.print(" M2:");
+  _lcd.print((int)encoderCount[1]);
   _lcd.print("    ");  // Clear sisa karakter
   
   // Line 2: IMU Yaw dan PS3 connection status

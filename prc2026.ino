@@ -70,7 +70,9 @@ void loop() {
   
   // Update RPM calculation dari encoder pulses
   hardware_updateEncoderRpm();
-  
+  for (uint8_t i = 0; i < 3; i++){
+    hardware_setMotorPwm(i, 4000); // Disable motor 4 (lift)
+  };
   // ══════════════════════════════════════════════════════════
   // CONTROL LOOP (Every Cycle)
   // ══════════════════════════════════════════════════════════
