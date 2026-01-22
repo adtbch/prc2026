@@ -118,7 +118,15 @@ bool hardware_initializeImu() {
  */
 void hardware_updateImu() {
   // Skip jika DMP tidak ready
-  if (!_dmpReady) return;
+  if (!_dmpReady) {
+    // Debug warning (print sekali saja)
+    static bool warningPrinted = false;
+    if (!warningPrinted) {
+      Serial.println("[IMU] WARNING: DMP not ready - Yaw will remain 0");
+      warningPrinted = true;
+    }
+    return;
+  }
   
   // Read packet dari FIFO
   if (_mpu.dmpGetCurrentFIFOPacket(_fifoBuffer)) {

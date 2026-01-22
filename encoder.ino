@@ -54,8 +54,6 @@ void IRAM_ATTR _isr_encoder1() {
   } else {
     encoderCount[0]--;
   }
-  
-  _encoderPulseCount[0]++;  // Selalu increment (untuk RPM)
 }
 
 /**
@@ -70,8 +68,6 @@ void IRAM_ATTR _isr_encoder2() {
   } else {
     encoderCount[1]--;
   }
-  
-  _encoderPulseCount[1]++;
 }
 
 /**
@@ -86,8 +82,6 @@ void IRAM_ATTR _isr_encoder3() {
   } else {
     encoderCount[2]--;
   }
-  
-  _encoderPulseCount[2]++;
 }
 
 /**
@@ -102,8 +96,6 @@ void IRAM_ATTR _isr_encoder4() {
   } else {
     encoderCount[3]--;
   }
-  
-  _encoderPulseCount[3]++;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -138,16 +130,17 @@ void hardware_initializeEncoders() {
 }
 
 /**
- * @brief Update RPM calculation untuk semua encoders
+ * @brief Update RPM calculation untuk semua encoders (SIGNED)
  * 
  * Dipanggil di loop() setiap cycle. Menghitung RPM berdasarkan
- * pulse count sejak update terakhir.
+ * delta pulse count sejak update terakhir.
+ * RPM positif = forward, RPM negatif = reverse
  * 
  * Formula:
- * RPM = (pulseCount * 60000) / (interval_ms * PPR)
+ * RPM = (deltaPulse * 60000) / (interval_ms * PPR)
  * 
  * Dimana:
- * - pulseCount = jumlah pulse dalam interval
+ * - deltaPulse = signed delta count dalam interval (bisa negatif)
  * - 60000 = konversi ms ke menit (60 sec * 1000 ms)
  * - interval_ms = waktu sejak update terakhir
  * - PPR = pulse per revolution
@@ -161,12 +154,18 @@ void hardware_updateEncoderRpm() {
     // Konstanta untuk konversi: (60000 ms/min) / (interval * PPR)
     float conversionFactor = 60000.0f / (deltaTime * Encoder::PULSES_PER_REVOLUTION);
     
-    // Hitung RPM untuk setiap motor
+    // Hitung RPM untuk setiap motor (SIGNED)
     // Disable interrupt sementara untuk atomic read
     noInterrupts();
     for (uint8_t i = 0; i < 4; i++) {
-      encoderRpm[i] = _encoderPulseCount[i] * conversionFactor;
-      _encoderPulseCount[i] = 0;  // Reset counter
+      // Calculate delta count (signed)
+      long deltaPulse = encoderCount[i] - _lastEncoderCount[i];
+      
+      // RPM = delta * conversion (bisa negatif untuk reverse)
+      encoderRpm[i] = deltaPulse * conversionFactor;
+      
+      // Update last count untuk next interval
+      _lastEncoderCount[i] = encoderCount[i];
     }
     interrupts();
     
@@ -214,7 +213,7 @@ void hardware_resetEncoders() {
   noInterrupts();
   for (uint8_t i = 0; i < 4; i++) {
     encoderCount[i] = 0;
-    _encoderPulseCount[i] = 0;
+    _lastEncoderCount[i] = 0;
     encoderRpm[i] = 0.0f;
   }
   interrupts();

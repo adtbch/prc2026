@@ -25,6 +25,51 @@
 #include <Ps3Controller.h>
 #include <LiquidCrystal_I2C.h>
 #include <MPU6050_6Axis_MotionApps20.h>
+#include <Preferences.h>
+
+//══════════════════════════════════════════════════════════
+// SERIAL DEBUG CONFIGURATION
+//══════════════════════════════════════════════════════════
+// CATATAN: Pin UART (TX/RX) digunakan untuk encoder
+// Serial communication DISABLED untuk free up UART pins
+//══════════════════════════════════════════════════════════
+
+// Comment baris ini jika ingin enable Serial debug
+#define DISABLE_SERIAL_DEBUG
+
+#ifdef DISABLE_SERIAL_DEBUG
+  // Undefine Serial yang didefinisikan di HardwareSerial.h
+  #undef Serial
+  
+  // Dummy class untuk disable semua Serial operations (zero overhead saat compile with -O2)
+  class DummySerial {
+  public:
+    void begin(unsigned long) {}
+    size_t println(const char*) { return 0; }
+    size_t println(const __FlashStringHelper*) { return 0; }
+    size_t println(String&) { return 0; }
+    size_t println(int) { return 0; }
+    size_t println(unsigned int) { return 0; }
+    size_t println(long) { return 0; }
+    size_t println(unsigned long) { return 0; }
+    size_t println(double, int = 2) { return 0; }
+    size_t println() { return 0; }
+    size_t print(const char*) { return 0; }
+    size_t print(const __FlashStringHelper*) { return 0; }
+    size_t print(String&) { return 0; }
+    size_t print(int) { return 0; }
+    size_t print(unsigned int) { return 0; }
+    size_t print(long) { return 0; }
+    size_t print(unsigned long) { return 0; }
+    size_t print(double, int = 2) { return 0; }
+    size_t printf(const char*, ...) { return 0; }
+    int available() { return 0; }
+    int read() { return -1; }
+    String readStringUntil(char) { return String(""); }
+  };
+  
+  static DummySerial Serial;
+#endif
 
 //══════════════════════════════════════════════════════════
 // 1. HARDWARE PIN DEFINITIONS
@@ -147,12 +192,33 @@ struct PidGains {
 };
 
 namespace Tuning {
-  // PID untuk closed-loop RPM control (wheel speed)
-  constexpr PidGains RPM_WHEEL = {
+  // PID untuk closed-loop RPM control per motor (wheel speed)
+  // RUNTIME MODIFIABLE - akan di-update dari Preferences saat startup
+  
+  // Motor 1 (Wheel 1 - Depan)
+  static PidGains RPM_WHEEL1 = {
     .kp = 2.0f,
     .ki = 0.08f,
     .kd = 0.0f,
     .outputLimit = 4095.0f,    // 12-bit PWM max
+    .deadband = 0.0f
+  };
+  
+  // Motor 2 (Wheel 2 - Kiri Belakang)
+  static PidGains RPM_WHEEL2 = {
+    .kp = 2.0f,
+    .ki = 0.08f,
+    .kd = 0.0f,
+    .outputLimit = 4095.0f,
+    .deadband = 0.0f
+  };
+  
+  // Motor 3 (Wheel 3 - Kanan Belakang)
+  static PidGains RPM_WHEEL3 = {
+    .kp = 2.0f,
+    .ki = 0.08f,
+    .kd = 0.0f,
+    .outputLimit = 4095.0f,
     .deadband = 0.0f
   };
   
@@ -233,10 +299,10 @@ namespace Config {
 // Encoder pulse counts (signed - bisa negatif untuk reverse)
 volatile long encoderCount[4] = {0, 0, 0, 0};
 
-// Pulse count absolut untuk RPM calculation (selalu positif)
-static volatile unsigned long _encoderPulseCount[4] = {0, 0, 0, 0};
+// Last encoder count untuk delta calculation (signed RPM)
+static long _lastEncoderCount[4] = {0, 0, 0, 0};
 
-// Current RPM values (updated setiap INTERVAL_MS)
+// Current RPM values (signed: + forward, - reverse)
 float encoderRpm[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
 // Last state untuk quadrature decoding
@@ -287,7 +353,7 @@ bool ps3ButtonStart = false;
 static MPU6050 _mpu;
 
 // MPU control/status
-static bool _dmpReady = false;          // DMP initialization status
+static bool _dmpReady = false;          // DMP initialization status (extern accessible)
 static uint8_t _devStatus = 0;          // Device status setelah init
 static uint16_t _packetSize = 0;        // Expected DMP packet size
 static uint8_t _fifoBuffer[64];         // FIFO buffer
@@ -303,5 +369,17 @@ float imuPitch = 0.0f;                  // Pitch angle
 float imuRoll = 0.0f;                   // Roll angle
 float imuYawOffset = 0.0f;              // Yaw calibration offset
 float imuYawCalibrated = 0.0f;          // Yaw setelah offset (0-360)
+
+//══════════════════════════════════════════════════════════
+// FUNCTION FORWARD DECLARATIONS (untuk resolve order issues)
+//══════════════════════════════════════════════════════════
+
+// LCD debug functions
+void lcd_debugMessage(const char* line1, const char* line2 = "", uint16_t duration_ms = 2000);
+void lcd_debugTuningProgress(uint8_t motorId, uint8_t cycle, uint8_t maxCycles, uint8_t progress);
+void lcd_debugPidValues(uint8_t motorId, float kp, float ki, float kd);
+void lcd_debugMetrics(float overshoot, unsigned long riseTime, float score);
+void lcd_debugError(const char* errorCode);
+void lcd_debugInit(const char* component, bool success);
 
 #endif // CONFIG_H

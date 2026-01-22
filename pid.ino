@@ -59,6 +59,9 @@ struct PidState {
 constexpr uint8_t PID_CHANNEL_COUNT = 8;
 static PidState _pidState[PID_CHANNEL_COUNT];
 
+// Target RPM untuk setiap wheel (global state)
+static float _targetRpmWheel[3] = {0.0f, 0.0f, 0.0f};
+
 // ══════════════════════════════════════════════════════════
 // PUBLIC FUNCTIONS
 // ══════════════════════════════════════════════════════════
@@ -148,7 +151,23 @@ float control_computePid(uint8_t channel, float setpoint, float input, const Pid
 // ══════════════════════════════════════════════════════════
 
 /**
- * @brief Control 3 wheels dengan target RPM (closed-loop)
+ * @brief Set target RPM untuk semua wheels
+ * 
+ * Hanya menyimpan target, tidak langsung eksekusi.
+ * Actual control dilakukan di control_updateRpmControl().
+ * 
+ * @param rpmW1 Target RPM untuk wheel 1 (Motor 1)
+ * @param rpmW2 Target RPM untuk wheel 2 (Motor 3)  
+ * @param rpmW3 Target RPM untuk wheel 3 (Motor 4)
+ */
+void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
+  _targetRpmWheel[0] = rpmW1;
+  _targetRpmWheel[1] = rpmW2;
+  _targetRpmWheel[2] = rpmW3;
+}
+
+/**
+ * @brief Update PID control untuk semua wheels (dipanggil setiap loop)
  * 
  * Menggunakan PID untuk match target RPM dengan feedback dari encoder.
  * Output: PWM command ke motor.
@@ -157,12 +176,13 @@ float control_computePid(uint8_t channel, float setpoint, float input, const Pid
  * - Per-wheel RPM scaling (kalibrasi)
  * - Minimum PWM compensation (deadband motor)
  * - Direction handling (positive/negative RPM)
- * 
- * @param rpmW1 Target RPM untuk wheel 1 (Motor 1)
- * @param rpmW2 Target RPM untuk wheel 2 (Motor 3)
- * @param rpmW3 Target RPM untuk wheel 3 (Motor 4)
  */
-void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
+void control_updateRpmControl() {
+  // Get current targets
+  float rpmW1 = _targetRpmWheel[0];
+  float rpmW2 = _targetRpmWheel[1];
+  float rpmW3 = _targetRpmWheel[2];
+  
   // Apply per-wheel scaling (kalibrasi untuk straight line)
   rpmW1 *= Tuning::RPM_WHEEL1_SCALE;
   rpmW2 *= Tuning::RPM_WHEEL2_SCALE;
@@ -175,6 +195,13 @@ void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
     PidChannel::WHEEL1_RPM,
     PidChannel::WHEEL2_RPM,
     PidChannel::WHEEL3_RPM
+  };
+  
+  // PID gains per motor (masing-masing motor bisa punya tuning berbeda)
+  const PidGains* pidGains[3] = {
+    &Tuning::RPM_WHEEL1,
+    &Tuning::RPM_WHEEL2,
+    &Tuning::RPM_WHEEL3
   };
   
   // Process each wheel
@@ -197,7 +224,7 @@ void control_setRpmAllWheels(float rpmW1, float rpmW2, float rpmW3) {
       pidChannels[i],
       targetMagnitude,
       currentRpm,
-      Tuning::RPM_WHEEL
+      *pidGains[i]  // Gunakan gains spesifik per motor
     );
     
     // Apply direction sign

@@ -132,6 +132,65 @@ void hardware_initializePs3() {
 }
 
 /**
+ * @brief Re-initialize PS3 untuk reconnection attempt
+ * 
+ * Dipanggil saat PS3 disconnect dan ingin reconnect.
+ * Soft reset Bluetooth stack tanpa restart ESP32.
+ */
+void hardware_reinitializePs3() {
+  // PS3 library tidak punya built-in reconnect
+  // Kita harus end() dan begin() ulang
+  
+  Serial.println("[PS3] Re-initializing PS3 controller (soft reset)...");
+  
+  // Re-attach callbacks (ensure callbacks masih active)
+  Ps3.attach(_ps3_onNotify);
+  Ps3.attachOnConnect(_ps3_onConnect);
+  Ps3.attachOnDisconnect(_ps3_onDisconnect);
+  
+  // Begin lagi (ini akan trigger re-scan)
+  Ps3.begin();
+  
+  Serial.println("[PS3] Soft reset complete - Press PS button to reconnect");
+}
+
+/**
+ * Full Bluetooth reset (hard reset untuk reconnection failures)
+ * Dipanggil setelah multiple soft reset failures
+ * 
+ * Strategy: Completely restart Bluetooth stack dari scratch
+ * WARNING: Lebih agresif dari soft reset, bisa disconnect devices lain
+ */
+void hardware_fullBluetoothReset() {
+  Serial.println("[PS3] ========================================");
+  Serial.println("[PS3] FULL BLUETOOTH RESET - Hard restart");
+  Serial.println("[PS3] ========================================");
+  
+  // Step 1: Stop Bluetooth completely
+  Serial.println("[PS3] Step 1: Stopping Bluetooth stack...");
+  btStop();  // Stop ESP32 Bluetooth stack
+  delay(1000);  // Wait for full shutdown
+  
+  // Step 2: Restart Bluetooth
+  Serial.println("[PS3] Step 2: Restarting Bluetooth stack...");
+  btStart();  // Restart ESP32 Bluetooth stack
+  delay(1000);  // Wait for initialization
+  
+  // Step 3: Re-initialize PS3 controller
+  Serial.println("[PS3] Step 3: Re-initializing PS3 controller...");
+  Ps3.attach(_ps3_onNotify);
+  Ps3.attachOnConnect(_ps3_onConnect);
+  Ps3.attachOnDisconnect(_ps3_onDisconnect);
+  
+  Ps3.begin();  // Start PS3 library
+  delay(500);
+  
+  Serial.println("[PS3] ========================================");
+  Serial.println("[PS3] Full reset complete - Press PS button");
+  Serial.println("[PS3] ========================================");
+}
+
+/**
  * @brief Check apakah PS3 controller connected
  * 
  * @return true jika connected, false jika tidak
