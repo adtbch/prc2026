@@ -27,22 +27,6 @@
  */
 
 // ══════════════════════════════════════════════════════════
-// PRIVATE FUNCTIONS
-// ══════════════════════════════════════════════════════════
-
-/**
- * @brief Normalize angle ke range 0-360 degrees
- * 
- * @param angle Angle in degrees (bisa di luar range 0-360)
- * @return Normalized angle (0-360)
- */
-static inline float _imu_normalizeAngle360(float angle) {
-  while (angle < 0.0f) angle += 360.0f;
-  while (angle >= 360.0f) angle -= 360.0f;
-  return angle;
-}
-
-// ══════════════════════════════════════════════════════════
 // PUBLIC FUNCTIONS
 // ══════════════════════════════════════════════════════════
 
@@ -144,11 +128,11 @@ void hardware_updateImu() {
     imuRoll = _ypr[2] * 180.0f / PI;
     
     // Normalize yaw ke 0-360
-    imuYaw = _imu_normalizeAngle360(imuYaw);
+    imuYaw = math_wrapAngle360(imuYaw);
     
     // Apply calibration offset
     imuYawCalibrated = imuYaw - imuYawOffset;
-    imuYawCalibrated = _imu_normalizeAngle360(imuYawCalibrated);
+    imuYawCalibrated = math_wrapAngle360(imuYawCalibrated);
   }
 }
 

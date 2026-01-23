@@ -23,23 +23,10 @@
  * - control_resetPidChannel(channel)
  * - control_setRpmAllWheels(rpm1, rpm2, rpm3)
  * 
+ * NOTE: PidChannel namespace didefinisikan di config.h
+ * 
  * ============================================================
  */
-
-// ══════════════════════════════════════════════════════════
-// PID CHANNEL DEFINITIONS
-// ══════════════════════════════════════════════════════════
-
-namespace PidChannel {
-  constexpr uint8_t WHEEL1_RPM = 0;        // Motor 1 RPM control
-  constexpr uint8_t WHEEL2_RPM = 1;        // Motor 3 RPM control  
-  constexpr uint8_t WHEEL3_RPM = 2;        // Motor 4 RPM control
-  constexpr uint8_t YAW_HOLD = 3;          // Yaw heading hold
-  constexpr uint8_t POSITION_X = 4;        // Position control X
-  constexpr uint8_t POSITION_Y = 5;        // Position control Y
-  constexpr uint8_t POSITION_YAW = 6;      // Position control Yaw
-  constexpr uint8_t RESERVED = 7;          // Reserved for future use
-}
 
 // ══════════════════════════════════════════════════════════
 // PID DATA STRUCTURES

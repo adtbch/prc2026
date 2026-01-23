@@ -52,6 +52,18 @@ float math_calculateAngleError(float targetDeg, float currentDeg) {
 }
 
 /**
+ * @brief Normalize angle ke range -PI to PI (radian)
+ * 
+ * @param angleRad Angle dalam radian
+ * @return Normalized angle (-PI to PI)
+ */
+float math_normalizeAngleRad(float angleRad) {
+  while (angleRad > PI) angleRad -= 2.0f * PI;
+  while (angleRad < -PI) angleRad += 2.0f * PI;
+  return angleRad;
+}
+
+/**
  * @brief Clamp float value ke range [min, max]
  * 
  * @param value Value to clamp
@@ -77,6 +89,20 @@ int math_clampInt(int value, int minVal, int maxVal) {
   if (value < minVal) return minVal;
   if (value > maxVal) return maxVal;
   return value;
+}
+
+/**
+ * @brief Calculate 2D vector magnitude
+ * 
+ * Menghitung panjang vektor sqrt(x^2 + y^2).
+ * Optimized untuk menghindari duplicate sqrt pattern.
+ * 
+ * @param x X component
+ * @param y Y component
+ * @return Magnitude of vector
+ */
+float math_vectorMagnitude(float x, float y) {
+  return sqrtf(x * x + y * y);
 }
 
 /**

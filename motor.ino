@@ -28,20 +28,6 @@
 
 
 /**
- * @brief Clamp PWM value ke range yang valid
- * 
- * Memastikan PWM tidak exceed batas hardware (0-1023)
- * 
- * @param pwm PWM value (bisa negatif untuk reverse)
- * @return Clamped PWM value
- */
-static inline int _motor_clampPwm(int pwm) {
-  if (pwm > Pwm::MAX_VALUE) return Pwm::MAX_VALUE;
-  if (pwm < -Pwm::MAX_VALUE) return -Pwm::MAX_VALUE;
-  return pwm;
-}
-
-/**
  * @brief Setup satu PWM channel untuk motor
  * 
  * Configure LEDC peripheral ESP32 untuk generate PWM signal
@@ -68,7 +54,7 @@ static void _motor_setupPwmChannel(uint8_t channel, uint8_t pinEnable) {
  * @param pwm PWM value (-1023 to +1023)
  */
 static void _motor_setL298nPwm(uint8_t pwmChannel, uint8_t pinEnable, uint8_t pinIn1, uint8_t pinIn2, int pwm) {
-  int pwmClamped = _motor_clampPwm(pwm);
+  int pwmClamped = math_clampInt(pwm, -Pwm::MAX_VALUE, Pwm::MAX_VALUE);
   
   if (pwmClamped > 0) {
     // Forward direction

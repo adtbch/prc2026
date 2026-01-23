@@ -282,6 +282,24 @@ namespace Tuning {
     .deadband = 0.0f
   };
   
+  // Position control X & Y (P-only untuk stability)
+  constexpr PidGains POSITION_XY = {
+    .kp = 2.0f,           // P gain: semakin jauh semakin cepat
+    .ki = 0.0f,           // Disable integral (avoid wind-up)
+    .kd = 0.0f,           // Disable derivative (P sudah smooth)
+    .outputLimit = 0.5f,  // Max velocity 0.5 m/s
+    .deadband = 0.05f     // Tolerance 5cm (arrival detection)
+  };
+  
+  // Position control Yaw/Heading
+  constexpr PidGains POSITION_YAW = {
+    .kp = 1.5f,           // P gain untuk rotasi
+    .ki = 0.0f,           // Disable integral
+    .kd = 0.3f,           // Enable D untuk smooth rotation
+    .outputLimit = 1.5f,  // Max angular velocity 1.5 rad/s
+    .deadband = 0.087f    // 5 derajat dalam radian
+  };
+  
   // PID untuk yaw hold (heading control saat translasi)
   constexpr PidGains YAW_HOLD = {
     .kp = 0.5f,
@@ -291,29 +309,25 @@ namespace Tuning {
     .deadband = 3.0f       // Ignore error < 3 derajat
   };
   
-  // PID untuk position control X dan Y (navigation)
-  constexpr PidGains POSITION_XY = {
-    .kp = 100.0f,
-    .ki = 0.0f,
-    .kd = 2.0f,
-    .outputLimit = 400.0f,
-    .deadband = 0.01f      // 1cm deadband
-  };
-  
-  // PID untuk position control Yaw (heading navigation)
-  constexpr PidGains POSITION_YAW = {
-    .kp = 0.5f,
-    .ki = 0.0f,
-    .kd = 0.0f,
-    .outputLimit = 40.0f,
-    .deadband = 5.0f       // Ignore error < 5 derajat
-  };
-  
   // Per-wheel RPM scaling (kalibrasi jika roda tidak sinkron)
   constexpr float RPM_WHEEL1_SCALE = 1.0f;
   constexpr float RPM_WHEEL2_SCALE = 1.0f;
   constexpr float RPM_WHEEL3_SCALE = 1.0f;
+}
 
+//══════════════════════════════════════════════════════════
+// PID CHANNEL DEFINITIONS
+//══════════════════════════════════════════════════════════
+
+namespace PidChannel {
+  constexpr uint8_t WHEEL1_RPM = 0;        // Motor 1 RPM control
+  constexpr uint8_t WHEEL2_RPM = 1;        // Motor 2 RPM control  
+  constexpr uint8_t WHEEL3_RPM = 2;        // Motor 3 RPM control
+  constexpr uint8_t YAW_HOLD = 3;          // Yaw heading hold
+  constexpr uint8_t POSITION_X = 4;        // Position control X
+  constexpr uint8_t POSITION_Y = 5;        // Position control Y
+  constexpr uint8_t POSITION_YAW = 6;      // Position control Yaw
+  constexpr uint8_t RESERVED = 7;          // Reserved for future use
 }
 
 //══════════════════════════════════════════════════════════

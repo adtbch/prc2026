@@ -122,24 +122,6 @@ static float _maxAngularAccel = Kinematics::MAX_ANGULAR_ACCEL; // rad/s²
 // ══════════════════════════════════════════════════════════
 
 /**
- * @brief Konstrain nilai antara min dan max
- */
-static inline float _constrain(float value, float minVal, float maxVal) {
-  if (value < minVal) return minVal;
-  if (value > maxVal) return maxVal;
-  return value;
-}
-
-/**
- * @brief Normalize angle ke range -PI to PI
- */
-static inline float _normalizeAngle(float angle) {
-  while (angle > PI) angle -= 2.0f * PI;
-  while (angle < -PI) angle += 2.0f * PI;
-  return angle;
-}
-
-/**
  * @brief Matrix multiplication: C = A * B
  * @param A Matrix A (rows_a x cols_a)
  * @param B Matrix B (cols_a x cols_b)
@@ -327,7 +309,7 @@ static void _kalmanPredict(float vx, float vy, float omega, float dt) {
   
   _kalman.x[0] = x + (vx * cos_theta - vy * sin_theta) * dt;
   _kalman.x[1] = y + (vx * sin_theta + vy * cos_theta) * dt;
-  _kalman.x[2] = _normalizeAngle(theta + omega * dt);
+  _kalman.x[2] = math_normalizeAngleRad(theta + omega * dt);
   
   // State transition Jacobian F (linearized model)
   float F[3][3] = {
@@ -400,7 +382,7 @@ static void _kalmanUpdate(float z_x, float z_y) {
   }
   
   // Normalize theta
-  _kalman.x[2] = _normalizeAngle(_kalman.x[2]);
+  _kalman.x[2] = math_normalizeAngleRad(_kalman.x[2]);
   
   // Update covariance: P = (I - K*H) * P
   float KH[3][3];
@@ -496,14 +478,14 @@ void kinematics_inverseKinematics(float vx_global, float vy_global, float omega,
   }
   
   // Step 2: Apply velocity constraints
-  float vel_magnitude = sqrt(vx_local * vx_local + vy_local * vy_local);
+  float vel_magnitude = math_vectorMagnitude(vx_local, vy_local);
   if (vel_magnitude > Kinematics::MAX_PLATFORM_VEL) {
     float scale = Kinematics::MAX_PLATFORM_VEL / vel_magnitude;
     vx_local *= scale;
     vy_local *= scale;
   }
   
-  omega = _constrain(omega, -Kinematics::MAX_ANGULAR_VEL, Kinematics::MAX_ANGULAR_VEL);
+  omega = math_clampValue(omega, -Kinematics::MAX_ANGULAR_VEL, Kinematics::MAX_ANGULAR_VEL);
   
   // Step 3: Jacobian inverse kinematics
   // Konstanta untuk perhitungan
@@ -523,9 +505,9 @@ void kinematics_inverseKinematics(float vx_global, float vy_global, float omega,
   // Step 4: Apply motor speed constraints dengan singularity avoidance
   for (int i = 0; i < 3; i++) {
     // Constrain ke max motor speed
-    wheel_vel[i] = _constrain(wheel_vel[i], 
-                              -Kinematics::MAX_MOTOR_RAD_S, 
-                               Kinematics::MAX_MOTOR_RAD_S);
+    wheel_vel[i] = math_clampValue(wheel_vel[i], 
+                                   -Kinematics::MAX_MOTOR_RAD_S, 
+                                    Kinematics::MAX_MOTOR_RAD_S);
     
     // Singularity avoidance: enforce minimum wheel speed jika tidak nol
     if (fabs(wheel_vel[i]) > 0.01f && fabs(wheel_vel[i]) < Kinematics::MIN_WHEEL_SPEED) {
@@ -611,7 +593,7 @@ void kinematics_updateOdometry(const float wheel_vel[3], float dt) {
   
   _odoX += (vx_local * cos_theta - vy_local * sin_theta) * dt;
   _odoY += (vx_local * sin_theta + vy_local * cos_theta) * dt;
-  _odoTheta = _normalizeAngle(_odoTheta + omega * dt);
+  _odoTheta = math_normalizeAngleRad(_odoTheta + omega * dt);
   
   // Step 3: Get IMU yaw (lebih reliable dari encoder untuk heading)
   float imu_yaw_deg = hardware_getImuYaw();
@@ -639,14 +621,13 @@ void kinematics_updateOdometry(const float wheel_vel[3], float dt) {
     _encoderErrorX = _globalX - _odoX;
     _encoderErrorY = _globalY - _odoY;
     
-    float error_magnitude = sqrt(_encoderErrorX * _encoderErrorX + 
-                                 _encoderErrorY * _encoderErrorY);
+    float error_magnitude = math_vectorMagnitude(_encoderErrorX, _encoderErrorY);
     
     // Estimate slip ratio
-    float distance_traveled = sqrt(_odoX * _odoX + _odoY * _odoY);
+    float distance_traveled = math_vectorMagnitude(_odoX, _odoY);
     if (distance_traveled > 0.01f) {  // Minimal 1cm untuk valid calculation
       _slipRatio = error_magnitude / distance_traveled;
-      _slipRatio = _constrain(_slipRatio, 0.0f, 1.0f);
+      _slipRatio = math_clampValue(_slipRatio, 0.0f, 1.0f);
     }
     
     // Warning jika slip terlalu besar
@@ -739,4 +720,130 @@ void kinematics_printDebug() {
   Serial.printf("Kalman P[0][0]=%.4f, P[1][1]=%.4f, P[2][2]=%.4f\n",
                 _kalman.P[0][0], _kalman.P[1][1], _kalman.P[2][2]);
   Serial.println("========================");
+}
+
+// ══════════════════════════════════════════════════════════
+// WAYPOINT NAVIGATION - Go-To-Goal Control
+// ══════════════════════════════════════════════════════════
+
+/**
+ * @brief Kontrol robot untuk bergerak ke koordinat target dengan yaw tertentu
+ * 
+ * Fungsi ini menggunakan PID controller (P-only untuk X/Y, PD untuk yaw) untuk
+ * generate velocity command yang optimal dan smooth.
+ * 
+ * USAGE:
+ *   float wheel_vel[3];
+ *   bool arrived = kinematics_moveToTarget(1.5f, 2.0f, 90.0f, 100.0f, wheel_vel);
+ *   if (!arrived) {
+ *     // Convert rad/s ke RPM dan set ke PID
+ *     control_setRpmTarget(0, wheel_vel[0] * 9.5493f);
+ *     control_setRpmTarget(1, wheel_vel[1] * 9.5493f);
+ *     control_setRpmTarget(2, wheel_vel[2] * 9.5493f);
+ *   } else {
+ *     // Robot sudah sampai target
+ *     control_stopAllMotors();
+ *   }
+ * 
+ * @param target_x Koordinat X target dalam meter
+ * @param target_y Koordinat Y target dalam meter
+ * @param target_yaw Heading target dalam derajat (0-360)
+ * @param max_rpm Kecepatan maksimal motor dalam RPM
+ * @param wheel_vel Output: kecepatan roda [V1, V2, V3] dalam rad/s
+ * 
+ * @return true jika sudah sampai target (position + heading), false jika masih bergerak
+ */
+bool kinematics_moveToTarget(float target_x, float target_y, float target_yaw, 
+                              float max_rpm, float wheel_vel[3]) {
+  // Step 1: Get posisi saat ini dari Kalman filter
+  float current_x, current_y, current_theta;
+  kinematics_getGlobalPosition(&current_x, &current_y, &current_theta);
+  
+  // Step 2: Hitung error posisi (dalam meter)
+  float dx = target_x - current_x;
+  float dy = target_y - current_y;
+  float distance = math_vectorMagnitude(dx, dy);
+  
+  // Step 3: Hitung angle ke target (untuk arah gerakan)
+  float angle_to_target = atan2(dy, dx);
+  
+  // Step 4: Compute velocity command menggunakan PID controller (P-only)
+  // X component: target = target_x, input = current_x
+  float speed = control_computePid(
+    PidChannel::POSITION_X,
+    distance,              // setpoint (magnitude)
+    0.0f,                  // input (we're at 0, want to reach distance)
+    Tuning::POSITION_XY    // P-only gains (Ki=0, Kd=0)
+  );
+  
+  // Velocity dalam global frame (arah ke target)
+  float vx_global = speed * cos(angle_to_target);
+  float vy_global = speed * sin(angle_to_target);
+  
+  // Step 5: Compute omega menggunakan PID controller
+  float target_theta = target_yaw * DEG_TO_RAD;
+  float heading_error = math_normalizeAngleRad(target_theta - current_theta);
+  
+  float omega = control_computePid(
+    PidChannel::POSITION_YAW,
+    target_theta,          // setpoint
+    current_theta,         // input
+    Tuning::POSITION_YAW   // PD gains (Ki=0, Kd enabled)
+  );
+  
+  // Step 6: Check apakah sudah sampai (PID deadband akan handle ini)
+  // Tapi double-check manual untuk safety
+  if (fabsf(vx_global) < 0.01f && 
+      fabsf(vy_global) < 0.01f && 
+      fabsf(omega) < 0.01f) {
+    // Sudah sampai target - stop robot
+    wheel_vel[0] = 0.0f;
+    wheel_vel[1] = 0.0f;
+    wheel_vel[2] = 0.0f;
+    
+    // Reset PID channels untuk next run
+    control_resetPidChannel(PidChannel::POSITION_X);
+    control_resetPidChannel(PidChannel::POSITION_Y);
+    control_resetPidChannel(PidChannel::POSITION_YAW);
+    
+    return true;  // Arrived!
+  }
+  
+  // Step 7: Convert velocity ke wheel speeds dengan inverse kinematics
+  // Field-centric = true (input dalam global frame)
+  kinematics_inverseKinematics(vx_global, vy_global, omega, wheel_vel, true);
+  
+  // Step 8: Limit wheel speed sesuai max_rpm yang diminta
+  float max_rad_s = max_rpm * 0.104719755f;  // RPM to rad/s (2π/60)
+  
+  // Gunakan math_normalizeThreeValues untuk efficient scaling
+  math_normalizeThreeValues(wheel_vel[0], wheel_vel[1], wheel_vel[2], max_rad_s);
+  
+  return false;  // Belum sampai
+}
+
+/**
+ * @brief Get status perjalanan ke target (untuk monitoring)
+ * 
+ * @param target_x Koordinat X target dalam meter
+ * @param target_y Koordinat Y target dalam meter
+ * @param target_yaw Heading target dalam derajat
+ * @param distance_remaining Output: jarak sisa ke target (meter)
+ * @param heading_error_deg Output: error heading dalam derajat
+ */
+void kinematics_getTargetStatus(float target_x, float target_y, float target_yaw,
+                                float* distance_remaining, float* heading_error_deg) {
+  // Get posisi saat ini
+  float current_x, current_y, current_theta;
+  kinematics_getGlobalPosition(&current_x, &current_y, &current_theta);
+  
+  // Hitung jarak ke target
+  float dx = target_x - current_x;
+  float dy = target_y - current_y;
+  *distance_remaining = math_vectorMagnitude(dx, dy);
+  
+  // Hitung error heading
+  float target_theta = target_yaw * DEG_TO_RAD;
+  float heading_error = math_normalizeAngleRad(target_theta - current_theta);
+  *heading_error_deg = heading_error * RAD_TO_DEG;
 }
