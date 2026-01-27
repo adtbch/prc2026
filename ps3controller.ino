@@ -55,6 +55,9 @@ static void _ps3_onConnect() {
 static void _ps3_onDisconnect() {
   ps3ControllerConnected = false;
   
+  // SAFETY: Stop robot immediately
+  ps3Interface_stop();
+  
   // Reset joysticks
   ps3StickLeftX = 0;
   ps3StickLeftY = 0;

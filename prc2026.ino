@@ -116,8 +116,8 @@ void loop() {
   // Handle PS3 connection state dan auto-reconnect
   ps3_handleConnection();
   
-  // Handle PS3 controller commands untuk tuning (non-blocking)
-  handlePs3Commands();
+  // Handle PS3 button commands (tuning, debug, etc)
+  ps3Interface_handleCommands();
   
   // Handle serial commands jika UART available (non-blocking)
   // handleSerialCommands();  // DISABLED - UART pins dipakai untuk keperluan lain
@@ -126,12 +126,14 @@ void loop() {
   // CONTROL LOOP (Every Cycle)
   // ══════════════════════════════════════════════════════════
   
+  // Manual control dengan PS3 joystick (jika connected dan tidak command mode)
+  ps3Interface_updateManualControl();
+  
   // PID controller update (CRITICAL: Must run every loop!)
   // Process current RPM targets dengan encoder feedback
   control_updateRpmControl();
   
-  // TODO: Implement manual control dan navigation
-  // navigation_updateManualControl();
+  // TODO: Implement autonomous navigation
   // navigation_runWaypointSequence();
   
   // ══════════════════════════════════════════════════════════
